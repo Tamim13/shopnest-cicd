@@ -1,0 +1,157 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      action:
+        description: "Deployment action"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - rollback
+      ci_run_id:
+        description: "Specific CI run ID to fetch artifacts from (optional for workflow_run)"
+        required: false
+        type: string
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target_environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine action and CI run ID
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+            echo "run_id=${{ inputs.ci_run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=deploy" >> "$GITHUB_OUTPUT"
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifacts
+        if: steps.meta.outputs.action == 'deploy' && steps.meta.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.meta.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Configure SSH key
+        if: vars.EC2_HOST != '' || secrets.EC2_HOST != ''
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Execute deployment or rollback on EC2
+        if: secrets.EC2_HOST != ''
+        env:
+          ACTION: ${{ steps.meta.outputs.action }}
+          RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
+        run: |
+          if [ "$ACTION" = "rollback" ]; then
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
+          else
+            RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "mkdir -p '$RELEASE_DIR/backend' '$RELEASE_DIR/frontend/dist' '$RELEASE_DIR/infra'"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/backend/"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/frontend/dist/"
+            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/infra/"
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "chmod +x '$RELEASE_DIR/infra/scripts/'*.sh && '$RELEASE_DIR/infra/scripts/deploy.sh' '$RELEASE_DIR' shopnest-backend"
+          fi
+
+      - name: Summary when EC2 secrets are not yet configured
+        if: secrets.EC2_HOST == ''
+        run: |
+          echo "Staging workflow ran (action=${{ steps.meta.outputs.action }}). Add EC2_HOST, EC2_USER, and EC2_SSH_KEY to the staging environment secrets when your EC2 instance is ready."
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target_environment == 'production')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine action and CI run ID
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+            echo "run_id=${{ inputs.ci_run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=deploy" >> "$GITHUB_OUTPUT"
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifacts
+        if: steps.meta.outputs.action == 'deploy' && steps.meta.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.meta.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Configure SSH key
+        if: secrets.EC2_HOST != ''
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Execute deployment or rollback on EC2
+        if: secrets.EC2_HOST != ''
+        env:
+          ACTION: ${{ steps.meta.outputs.action }}
+          RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
+        run: |
+          if [ "$ACTION" = "rollback" ]; then
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
+          else
+            RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "mkdir -p '$RELEASE_DIR/backend' '$RELEASE_DIR/frontend/dist' '$RELEASE_DIR/infra'"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/backend/"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/frontend/dist/"
+            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/infra/"
+            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              "chmod +x '$RELEASE_DIR/infra/scripts/'*.sh && '$RELEASE_DIR/infra/scripts/deploy.sh' '$RELEASE_DIR' shopnest-backend"
+          fi
+
+      - name: Summary when EC2 secrets are not yet configured
+        if: secrets.EC2_HOST == ''
+        run: |
+          echo "Production workflow ran (action=${{ steps.meta.outputs.action }}). Add EC2_HOST, EC2_USER, and EC2_SSH_KEY to the production environment secrets when your EC2 instance is ready."
