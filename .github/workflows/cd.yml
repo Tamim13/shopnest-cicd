@@ -59,38 +59,37 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: artifacts
 
-      - name: Configure SSH key
-        if: vars.EC2_HOST != '' || secrets.EC2_HOST != ''
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
-
       - name: Execute deployment or rollback on EC2
-        if: secrets.EC2_HOST != ''
         env:
           ACTION: ${{ steps.meta.outputs.action }}
           RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_USER" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "Staging environment secrets (EC2_HOST, EC2_USER, EC2_SSH_KEY) not configured yet; skipping remote SSH step."
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
           if [ "$ACTION" = "rollback" ]; then
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
           else
             RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "mkdir -p '$RELEASE_DIR/backend' '$RELEASE_DIR/frontend/dist' '$RELEASE_DIR/infra'"
-            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/backend/"
-            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/frontend/dist/"
-            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/infra/"
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/backend/"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/frontend/dist/"
+            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/infra/"
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "chmod +x '$RELEASE_DIR/infra/scripts/'*.sh && '$RELEASE_DIR/infra/scripts/deploy.sh' '$RELEASE_DIR' shopnest-backend"
           fi
-
-      - name: Summary when EC2 secrets are not yet configured
-        if: secrets.EC2_HOST == ''
-        run: |
-          echo "Staging workflow ran (action=${{ steps.meta.outputs.action }}). Add EC2_HOST, EC2_USER, and EC2_SSH_KEY to the staging environment secrets when your EC2 instance is ready."
 
   deploy-production:
     name: Deploy to Production
@@ -123,35 +122,34 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: artifacts
 
-      - name: Configure SSH key
-        if: secrets.EC2_HOST != ''
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
-
       - name: Execute deployment or rollback on EC2
-        if: secrets.EC2_HOST != ''
         env:
           ACTION: ${{ steps.meta.outputs.action }}
           RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_USER" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "Production environment secrets (EC2_HOST, EC2_USER, EC2_SSH_KEY) not configured yet; skipping remote SSH step."
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
           if [ "$ACTION" = "rollback" ]; then
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
           else
             RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "mkdir -p '$RELEASE_DIR/backend' '$RELEASE_DIR/frontend/dist' '$RELEASE_DIR/infra'"
-            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/backend/"
-            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/frontend/dist/"
-            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:$RELEASE_DIR/infra/"
-            ssh -i ~/.ssh/id_ed25519 "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-backend-*/. "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/backend/"
+            scp -i ~/.ssh/id_ed25519 -r artifacts/shopnest-frontend-dist-*/. "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/frontend/dist/"
+            scp -i ~/.ssh/id_ed25519 -r infra/scripts "${EC2_USER}@${EC2_HOST}:$RELEASE_DIR/infra/"
+            ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
               "chmod +x '$RELEASE_DIR/infra/scripts/'*.sh && '$RELEASE_DIR/infra/scripts/deploy.sh' '$RELEASE_DIR' shopnest-backend"
           fi
-
-      - name: Summary when EC2 secrets are not yet configured
-        if: secrets.EC2_HOST == ''
-        run: |
-          echo "Production workflow ran (action=${{ steps.meta.outputs.action }}). Add EC2_HOST, EC2_USER, and EC2_SSH_KEY to the production environment secrets when your EC2 instance is ready."
