@@ -27,3 +27,18 @@ For an e-commerce platform like ShopNest—where storefront availability, produc
 ## AI & Tooling Notes
 
 AI assistance was used to help draft GitHub Actions workflow YAML, shell scripts for deployment/health/rollback, and documentation structure. Every workflow, script, and configuration was reviewed against repository paths and requirements, tested through GitHub Actions runs and pull requests, and refined iteratively before merging.
+
+## Live Deployment
+
+- **Live URL:** http://13.211.151.181
+
+## Verification & Pipeline Screenshots
+
+### Live Application
+![Live Application](docs/screenshots/Screenshot%202026-11-20%20010848.png)
+
+### Server & API Verification
+![Server & API Verification](docs/screenshots/Screenshot%202026-11-20%20011126.png)
+
+### GitHub Actions Runs
+![GitHub Actions Runs](docs/screenshots/Screenshot%202026-11-20%20011208.png)
