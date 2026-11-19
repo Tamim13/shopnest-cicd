@@ -23,6 +23,10 @@ on:
         options:
           - deploy
           - rollback
+      rollback_version:
+        description: "Specific release ID to roll back to (optional; defaults to previous release)"
+        required: false
+        type: string
       ci_run_id:
         description: "Specific CI run ID to fetch artifacts from (optional for workflow_run)"
         required: false
@@ -62,6 +66,7 @@ jobs:
       - name: Execute deployment or rollback on EC2
         env:
           ACTION: ${{ steps.meta.outputs.action }}
+          ROLLBACK_VERSION: ${{ inputs.rollback_version }}
           RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -79,7 +84,7 @@ jobs:
 
           if [ "$ACTION" = "rollback" ]; then
             ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
-              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
+              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend '$ROLLBACK_VERSION'"
           else
             RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
             ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
@@ -125,6 +130,7 @@ jobs:
       - name: Execute deployment or rollback on EC2
         env:
           ACTION: ${{ steps.meta.outputs.action }}
+          ROLLBACK_VERSION: ${{ inputs.rollback_version }}
           RELEASE_ID: "${{ github.sha }}-${{ github.run_id }}"
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -142,7 +148,7 @@ jobs:
 
           if [ "$ACTION" = "rollback" ]; then
             ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
-              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend"
+              "/opt/shopnest/current/infra/scripts/rollback.sh shopnest-backend '$ROLLBACK_VERSION'"
           else
             RELEASE_DIR="/opt/shopnest/releases/${RELEASE_ID}"
             ssh -i ~/.ssh/id_ed25519 "${EC2_USER}@${EC2_HOST}" \
