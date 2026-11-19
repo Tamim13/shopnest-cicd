@@ -1,0 +1,19 @@
+{
+  "name": "shopnest-backend",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "lint": "eslint src/ tests/",
+    "test": "node --test tests/*.test.js",
+    "build": "node -c src/app.js src/db.js src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

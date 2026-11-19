@@ -1,0 +1,23 @@
+{
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "plugins": ["html"],
+  "extends": "eslint:recommended",
+  "globals": {
+    "module": "readonly"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.js"],
+      "env": {
+        "node": true,
+        "browser": false
+      }
+    }
+  ],
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
+  }
+}
